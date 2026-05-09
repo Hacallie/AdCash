@@ -3,11 +3,23 @@ import { useState, useEffect, useCallback } from "react";
 // ─── ADMIN IDs ────────────────────────────────────────────────────
 const ADMIN_IDS = ["7952834563", "8768003798"];
 
-// ─── AD LINKS POOL (randomized on each click) ─────────────────────
-const DEFAULT_AD_LINKS = [
-  "https://www.profitablecpmratenetwork.com/maczk05c?key=050e081fb24437c3908f7ed91aa79cc8",
-  "https://www.profitablecpmratenetwork.com/maczk05c?key=050e081fb24437c3908f7ed91aa79cc8",
-];
+// ─── MONETAG 50/50 RANDOM AD ─────────────────────────────────────
+// Your zone: 10986697 | Client zone: 10986665
+const showRandomMonetag = () => {
+  return new Promise((resolve, reject) => {
+    const useYourZone = Math.random() < 0.5;
+    const primaryFn = useYourZone ? window.show_10986697 : window.show_10986665;
+    const fallbackFn = useYourZone ? window.show_10986665 : window.show_10986697;
+
+    if (typeof primaryFn === "function") {
+      primaryFn().then(resolve).catch(reject);
+    } else if (typeof fallbackFn === "function") {
+      fallbackFn().then(resolve).catch(reject);
+    } else {
+      reject(new Error("Monetag SDK not loaded yet"));
+    }
+  });
+};
 
 // ─── API ──────────────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_URL || "https://adcash-backend-z7o6.onrender.com";
@@ -192,41 +204,34 @@ const BalanceCard = ({ user }) => (
 );
 
 // ─── ADS TAB ────────────────────────────────────────────────────
-const AdsTab = ({ user, onBalanceUpdate, adLinks }) => {
+const AdsTab = ({ user, onBalanceUpdate }) => {
   const [adState, setAdState] = useState("ready");
   const [adsToday, setAdsToday] = useState(user.adsToday || 0);
   const [totalWatched, setTotalWatched] = useState(user.totalWatched || 0);
   const [totalEarned, setTotalEarned] = useState(user.totalEarned || 0);
+  const [errorMsg, setErrorMsg] = useState("");
   const MAX = 20;
-
-  const getRandomAdLink = () => {
-    const links = adLinks && adLinks.length > 0 ? adLinks : DEFAULT_AD_LINKS;
-    return links[Math.floor(Math.random() * links.length)];
-  };
 
   const watchAd = async () => {
     if (adsToday >= MAX || adState !== "ready") return;
     setAdState("loading");
-
-    // Open random ad link
-    const adUrl = getRandomAdLink();
-    window.open(adUrl, "_blank");
-
-    // Wait 5 seconds then auto-claim reward
-    setTimeout(async () => {
-      try {
-        const result = await apiWatchAd();
-        setAdsToday(result.adsToday);
-        setTotalWatched(result.totalWatched);
-        setTotalEarned(prev => +(prev + result.earned).toFixed(3));
-        onBalanceUpdate(result.newBalance);
-        setAdState("complete");
-        setTimeout(() => setAdState("ready"), 2500);
-      } catch (err) {
-        setAdState("error");
-        setTimeout(() => setAdState("ready"), 2000);
-      }
-    }, 5000);
+    setErrorMsg("");
+    try {
+      // Show random Monetag ad (50/50 between your zone and client zone)
+      await showRandomMonetag();
+      // Ad completed — credit reward via backend
+      const result = await apiWatchAd();
+      setAdsToday(result.adsToday);
+      setTotalWatched(result.totalWatched);
+      setTotalEarned(prev => +(prev + result.earned).toFixed(3));
+      onBalanceUpdate(result.newBalance);
+      setAdState("complete");
+      setTimeout(() => setAdState("ready"), 2500);
+    } catch (err) {
+      setAdState("error");
+      setErrorMsg("Watch the full ad to earn your reward!");
+      setTimeout(() => { setAdState("ready"); setErrorMsg(""); }, 3000);
+    }
   };
 
   return (
@@ -265,8 +270,9 @@ const AdsTab = ({ user, onBalanceUpdate, adLinks }) => {
               </div>
               <div style={{ fontSize: 12, color: C.textMuted }}>
                 {adState === "complete" ? "+$0.016 added to your balance"
-                  : adState === "loading" ? "Ad opened in new tab — reward auto-credits"
-                  : "Tap to open sponsored link & earn"}
+                  : adState === "error" ? errorMsg
+                  : adState === "loading" ? "Please watch the full ad to earn"
+                  : "Tap to watch a short ad and earn instantly"}
               </div>
               <div style={{ marginTop: 10 }}>
                 <div className="progress-bar">
@@ -604,7 +610,7 @@ const WithdrawTab = ({ user, onBalanceUpdate }) => {
 };
 
 // ─── USER APP ────────────────────────────────────────────────────
-const UserApp = ({ user: initialUser, isAdmin, onGoAdmin, adLinks }) => {
+const UserApp = ({ user: initialUser, isAdmin, onGoAdmin }) => {
   const [tab, setTab] = useState("ads");
   const [user, setUser] = useState(initialUser);
 
@@ -624,7 +630,7 @@ const UserApp = ({ user: initialUser, isAdmin, onGoAdmin, adLinks }) => {
       <TopBar />
       <div style={{ flex: 1, padding: "16px 16px 90px", overflowY: "auto" }}>
         <BalanceCard user={user} />
-        {tab === "ads" && <AdsTab user={user} onBalanceUpdate={onBalanceUpdate} adLinks={adLinks} />}
+        {tab === "ads" && <AdsTab user={user} onBalanceUpdate={onBalanceUpdate} />}
         {tab === "tasks" && <TasksTab user={user} onBalanceUpdate={onBalanceUpdate} />}
         {tab === "invite" && <InviteTab user={user} />}
         {tab === "withdraw" && <WithdrawTab user={user} onBalanceUpdate={onBalanceUpdate} />}
@@ -999,7 +1005,6 @@ export default function App() {
   const [telegramUser, setTelegramUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userData, setUserData] = useState(null);
-  const [adLinks, setAdLinks] = useState([]);
 
   useEffect(() => {
     let tgUser = null;
@@ -1060,8 +1065,6 @@ export default function App() {
         setView(admin ? "admin" : "user");
       });
 
-    // Load ad links
-    apiGetAdLinks().then(r => setAdLinks(r.links?.map(l => l.url) || [])).catch(() => {});
   }, []);
 
   if (view === "loading") return (
@@ -1078,7 +1081,7 @@ export default function App() {
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, position: "relative" }}>
       <GlobalStyles />
       {view === "user"
-        ? <UserApp user={userData} isAdmin={isAdmin} onGoAdmin={() => setView("admin")} adLinks={adLinks} />
+        ? <UserApp user={userData} isAdmin={isAdmin} onGoAdmin={() => setView("admin")} />
         : <AdminPanel onGoUser={() => setView("user")} />}
     </div>
   );
