@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>EarnBot</title>
+
+<!-- Telegram WebApp SDK -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<!-- Adsgram SDK -->
+<script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+
+<style>
+/* ── Design Tokens ─────────────────────────────────────────────── */
+:root {
+  --gold-bright: #FFD700;
+  --gold-mid:    #C9A227;
+  --gold-dim:    #7A6018;
+  --bg-deep:     #0A0A0B;
+  --bg-card:     #111114;
+  --bg-lift:     #18181C;
+  --bg-input:    #1E1E24;
+  --border:      rgba(201,162,39,0.18);
+  --border-glow: rgba(255,215,0,0.35);
+  --text-primary:#F5F0E8;
+  --text-muted:  #7A7880;
+  --text-gold:   #FFD700;
+  --green:       #00C853;
+  --red:         #FF3D57;
+  --radius-sm:   10px;
+  --radius-md:   16px;
+  --radius-lg:   24px;
+  --shadow-gold: 0 0 24px rgba(255,215,0,0.15);
+  --shadow-card: 0 8px 32px rgba(0,0,0,0.6);
+  --font-display:'Playfair Display', Georgia, serif;
+  --font-body:   'DM Sans', 'Segoe UI', sans-serif;
+  --font-mono:   'JetBrains Mono', monospace;
+}
+
+/* ── Reset & Base ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+}
+
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
+
+/* ── Scrollbar ─────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+
+/* ── App Shell ─────────────────────────────────────────────────── */
+#app { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* ── Loading Screen ────────────────────────────────────────────── */
+#loading {
+  position: fixed; inset: 0; z-index: 999;
+  background: var(--bg-deep);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 20px;
+}
+.loader-logo {
+  font-family: var(--font-display);
+  font-size: 2.2rem; font-weight: 900;
+  background: linear-gradient(135deg, var(--gold-bright), var(--gold-mid));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  letter-spacing: 2px;
+}
+.loader-ring {
+  width: 48px; height: 48px;
+  border: 3px solid var(--bg-lift);
+  border-top-color: var(--gold-bright);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Header ────────────────────────────────────────────────────── */
+header {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(10,10,11,0.92);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.header-logo {
+  font-family: var(--font-display);
+  font-size: 1.4rem; font-weight: 900;
+  background: linear-gradient(135deg, var(--gold-bright), var(--gold-mid));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.header-balance {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  padding: 8px 16px;
+}
+.header-balance .icon { font-size: 1rem; }
+.header-balance .amount {
+  font-family: var(--font-mono);
+  font-size: 0.9rem; font-weight: 600;
+  color: var(--gold-bright);
+}
+
+/* ── Nav Bar ───────────────────────────────────────────────────── */
+nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+  background: rgba(17,17,20,0.96);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+}
+.nav-item {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 4px;
+  padding: 6px 4px;
+  cursor: pointer;
+  border: none; background: none;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.65rem; font-weight: 500;
+  transition: color 0.2s, transform 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.nav-item .nav-icon { font-size: 1.4rem; line-height: 1; }
+.nav-item.active { color: var(--gold-bright); }
+.nav-item.active .nav-icon { filter: drop-shadow(0 0 8px rgba(255,215,0,0.6)); }
+.nav-item:active { transform: scale(0.92); }
+
+/* ── Pages ─────────────────────────────────────────────────────── */
+main { flex: 1; padding: 16px 16px 100px; overflow-y: auto; }
+.page { display: none; animation: fadeUp 0.3s ease; }
+.page.active { display: block; }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Cards ─────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+}
+.card-glow {
+  border-color: var(--border-glow);
+  box-shadow: var(--shadow-gold), var(--shadow-card);
+}
+
+/* ── Balance Hero ──────────────────────────────────────────────── */
+.balance-hero {
+  background: linear-gradient(135deg, #141410 0%, #1A1A10 50%, #141410 100%);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-lg);
+  padding: 32px 24px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-gold), var(--shadow-card);
+  margin-bottom: 20px;
+}
+.balance-hero::before {
+  content: '';
+  position: absolute; top: -60%; left: -60%;
+  width: 220%; height: 220%;
+  background: radial-gradient(ellipse, rgba(255,215,0,0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.balance-label {
+  font-size: 0.75rem; font-weight: 600;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--gold-dim);
+  margin-bottom: 8px;
+}
+.balance-amount {
+  font-family: var(--font-mono);
+  font-size: 3rem; font-weight: 600;
+  color: var(--gold-bright);
+  text-shadow: 0 0 40px rgba(255,215,0,0.3);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.balance-currency {
+  font-size: 1rem; color: var(--gold-mid);
+}
+.balance-total {
+  font-size: 0.8rem; color: var(--text-muted);
+  margin-top: 12px;
+}
+
+/* ── Stats Grid ────────────────────────────────────────────────── */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 12px; text-align: center;
+}
+.stat-icon { font-size: 1.4rem; margin-bottom: 6px; }
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 1rem; font-weight: 600;
+  color: var(--text-primary);
+}
+.stat-label { font-size: 0.65rem; color: var(--text-muted); margin-top: 2px; }
+
+/* ── Section Title ─────────────────────────────────────────────── */
+.section-title {
+  font-size: 0.7rem; font-weight: 600;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--gold-dim);
+  margin-bottom: 12px; margin-top: 24px;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 16px 24px;
+  border: none; cursor: pointer;
+  font-family: var(--font-body); font-size: 1rem; font-weight: 600;
+  border-radius: var(--radius-md);
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  position: relative; overflow: hidden;
+}
+.btn:active { transform: scale(0.97); }
+.btn-gold {
+  background: linear-gradient(135deg, var(--gold-bright), var(--gold-mid));
+  color: #0A0A0B;
+  box-shadow: 0 4px 20px rgba(255,215,0,0.25);
+}
+.btn-gold:hover { box-shadow: 0 6px 28px rgba(255,215,0,0.35); }
+.btn-outline {
+  background: transparent;
+  border: 1.5px solid var(--gold-mid);
+  color: var(--gold-bright);
+}
+.btn-ghost {
+  background: var(--bg-lift);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.btn:disabled {
+  opacity: 0.45; cursor: not-allowed;
+  transform: none !important;
+}
+.btn-sm { padding: 10px 18px; font-size: 0.85rem; border-radius: var(--radius-sm); }
+
+/* ── Ad Watch Page ─────────────────────────────────────────────── */
+.ad-hero {
+  text-align: center; padding: 40px 24px;
+  background: linear-gradient(135deg, #0F0F0F, #161410);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 20px;
+}
+.ad-hero-icon { font-size: 4rem; margin-bottom: 16px; }
+.ad-hero-title {
+  font-family: var(--font-display);
+  font-size: 1.6rem; font-weight: 700;
+  color: var(--gold-bright); margin-bottom: 8px;
+}
+.ad-hero-sub { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 24px; }
+
+.progress-bar-wrap {
+  background: var(--bg-lift);
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  height: 8px; overflow: hidden;
+  margin: 12px 0;
+}
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold-mid), var(--gold-bright));
+  border-radius: 50px;
+  transition: width 0.5s ease;
+  box-shadow: 0 0 12px rgba(255,215,0,0.4);
+}
+.progress-label { font-size: 0.75rem; color: var(--text-muted); text-align: right; }
+
+.ad-limit-info {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--bg-lift); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.ad-limit-info .label { font-size: 0.8rem; color: var(--text-muted); }
+.ad-limit-info .value { font-family: var(--font-mono); font-size: 0.9rem; color: var(--gold-bright); }
+
+/* ── Tasks ─────────────────────────────────────────────────────── */
+.task-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 10px;
+  transition: border-color 0.2s;
+}
+.task-item.completed { opacity: 0.5; }
+.task-item:not(.completed):hover { border-color: var(--border-glow); }
+.task-icon-wrap {
+  width: 44px; height: 44px; flex-shrink: 0;
+  background: var(--bg-lift);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem;
+}
+.task-info { flex: 1; min-width: 0; }
+.task-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 3px; }
+.task-desc { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.task-reward {
+  font-family: var(--font-mono);
+  font-size: 0.85rem; font-weight: 600;
+  color: var(--green); white-space: nowrap;
+}
+.task-check { font-size: 1.2rem; color: var(--green); }
+
+/* ── Referral Page ─────────────────────────────────────────────── */
+.ref-hero {
+  background: linear-gradient(135deg, #0F0E08, #161508);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-lg);
+  padding: 28px 20px; text-align: center;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-gold);
+}
+.ref-hero-icon { font-size: 3rem; margin-bottom: 12px; }
+.ref-hero-title {
+  font-family: var(--font-display);
+  font-size: 1.4rem; font-weight: 700;
+  color: var(--gold-bright); margin-bottom: 6px;
+}
+.ref-hero-desc { font-size: 0.85rem; color: var(--text-muted); }
+
+.ref-link-box {
+  background: var(--bg-input);
+  border: 1.5px solid var(--border-glow);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+}
+.ref-link-text {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.75rem; color: var(--gold-mid);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.copy-btn {
+  background: var(--gold-bright); color: #0A0A0B;
+  border: none; cursor: pointer;
+  font-size: 0.8rem; font-weight: 700;
+  padding: 8px 14px; border-radius: var(--radius-sm);
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.2s; white-space: nowrap;
+}
+.copy-btn:active { transform: scale(0.95); }
+
+.ref-stats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  margin-bottom: 20px;
+}
+.ref-stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px 16px; text-align: center;
+}
+.ref-stat-num {
+  font-family: var(--font-mono);
+  font-size: 1.6rem; font-weight: 600;
+  color: var(--gold-bright);
+}
+.ref-stat-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 4px; }
+
+/* ── Withdraw Page ─────────────────────────────────────────────── */
+.withdraw-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px 20px;
+  margin-bottom: 16px;
+}
+.field-group { margin-bottom: 16px; }
+.field-label {
+  font-size: 0.75rem; font-weight: 600;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 8px;
+  display: block;
+}
+.field-input {
+  width: 100%; padding: 14px 16px;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.field-input:focus { border-color: var(--gold-mid); }
+.field-select {
+  width: 100%; padding: 14px 16px;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.field-select:focus { border-color: var(--gold-mid); }
+
+.min-note {
+  font-size: 0.75rem; color: var(--text-muted);
+  text-align: center; margin-bottom: 20px;
+}
+
+/* ── Withdrawal History ────────────────────────────────────────── */
+.wd-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+}
+.wd-icon { font-size: 1.3rem; flex-shrink: 0; }
+.wd-info { flex: 1; }
+.wd-amount { font-family: var(--font-mono); font-size: 0.95rem; font-weight: 600; }
+.wd-method { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+.wd-badge {
+  font-size: 0.65rem; font-weight: 700;
+  padding: 4px 10px; border-radius: 50px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.badge-pending { background: rgba(255,170,0,0.15); color: #FFAA00; }
+.badge-approved { background: rgba(0,200,83,0.15); color: var(--green); }
+.badge-rejected { background: rgba(255,61,87,0.15); color: var(--red); }
+
+/* ── Toast Notification ────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--bg-lift);
+  border: 1px solid var(--border-glow);
+  color: var(--text-primary);
+  padding: 12px 24px;
+  border-radius: 50px;
+  font-size: 0.85rem; font-weight: 500;
+  z-index: 999;
+  opacity: 0; pointer-events: none;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  box-shadow: var(--shadow-gold);
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.success { border-color: rgba(0,200,83,0.4); color: var(--green); }
+#toast.error   { border-color: rgba(255,61,87,0.4); color: var(--red); }
+
+/* ── Coin burst animation ──────────────────────────────────────── */
+.coin-burst {
+  position: fixed; pointer-events: none; z-index: 998;
+  font-size: 1.5rem;
+  animation: coinFly 0.8s ease-out forwards;
+}
+@keyframes coinFly {
+  0%   { opacity: 1; transform: translate(0,0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(0.3); }
+}
+
+/* ── Empty state ───────────────────────────────────────────────── */
+.empty-state {
+  text-align: center; padding: 40px 20px;
+  color: var(--text-muted); font-size: 0.9rem;
+}
+.empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+
+/* ── Pulse animation for watch btn ────────────────────────────── */
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 4px 20px rgba(255,215,0,0.25); }
+  50%       { box-shadow: 0 4px 40px rgba(255,215,0,0.5); }
+}
+.btn-pulse { animation: pulse 2s ease-in-out infinite; }
+</style>
+</head>
+
+<body>
+<div id="loading">
+  <div class="loader-logo">EarnBot</div>
+  <div class="loader-ring"></div>
+</div>
+
+<div id="app" style="display:none">
+  <!-- Header -->
+  <header>
+    <div class="header-logo">EarnBot</div>
+    <div class="header-balance">
+      <span class="icon">💰</span>
+      <span class="amount" id="header-balance">$0.0000</span>
+    </div>
+  </header>
+
+  <!-- Main content -->
+  <main>
+
+    <!-- ── Dashboard ───────────────────────────────────────── -->
+    <div class="page active" id="page-home">
+      <div class="balance-hero">
+        <div class="balance-label">Total Balance</div>
+        <div class="balance-amount" id="balance-display">0.0000</div>
+        <div class="balance-currency">USD</div>
+        <div class="balance-total">Total earned: $<span id="total-earned">0.00</span></div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">📺</div>
+          <div class="stat-value" id="stat-ads">0</div>
+          <div class="stat-label">Ads Today</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">👥</div>
+          <div class="stat-value" id="stat-refs">0</div>
+          <div class="stat-label">Referrals</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">✅</div>
+          <div class="stat-value" id="stat-tasks">0</div>
+          <div class="stat-label">Tasks Done</div>
+        </div>
+      </div>
+
+      <div class="section-title">Quick Actions</div>
+      <div style="display:grid; gap:10px">
+        <button class="btn btn-gold btn-pulse" onclick="switchPage('ads')">
+          📺 Watch Ads — Earn $0.01
+        </button>
+        <button class="btn btn-outline" onclick="switchPage('tasks')">
+          ✅ Complete Tasks
+        </button>
+        <button class="btn btn-ghost" onclick="switchPage('referral')">
+          👥 Invite Friends — Earn $0.05
+        </button>
+      </div>
+
+      <div class="section-title">How it works</div>
+      <div class="card" style="display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; gap:12px; align-items:flex-start">
+          <div style="font-size:1.4rem">📺</div>
+          <div>
+            <div style="font-weight:600; margin-bottom:3px">Watch Rewarded Ads</div>
+            <div style="font-size:0.8rem; color:var(--text-muted)">Watch short video ads via Adsgram. Earn $0.01 per ad, up to 50 ads/day.</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start">
+          <div style="font-size:1.4rem">✅</div>
+          <div>
+            <div style="font-weight:600; margin-bottom:3px">Complete Sponsor Tasks</div>
+            <div style="font-size:0.8rem; color:var(--text-muted)">Join channels, follow accounts, visit pages. Earn $0.03–$0.10 per task.</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start">
+          <div style="font-size:1.4rem">👥</div>
+          <div>
+            <div style="font-weight:600; margin-bottom:3px">Refer Friends</div>
+            <div style="font-size:0.8rem; color:var(--text-muted)">Share your link. Earn $0.05 for every person who joins.</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start">
+          <div style="font-size:1.4rem">💸</div>
+          <div>
+            <div style="font-weight:600; margin-bottom:3px">Withdraw via Crypto</div>
+            <div style="font-size:0.8rem; color:var(--text-muted)">Minimum $1.00. Processed within 24–48 hours by admin.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Watch Ads ──────────────────────────────────────── -->
+    <div class="page" id="page-ads">
+      <div class="ad-hero">
+        <div class="ad-hero-icon">📺</div>
+        <div class="ad-hero-title">Watch & Earn</div>
+        <div class="ad-hero-sub">Each ad earns you $0.01 — powered by Adsgram</div>
+        <div class="ad-limit-info">
+          <span class="label">Today's Progress</span>
+          <span class="value" id="ad-progress-text">0 / 50 ads</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" id="ad-progress-bar" style="width:0%"></div>
+        </div>
+        <div class="progress-label" id="ad-progress-pct">$0.00 / $0.50 today</div>
+      </div>
+
+      <button class="btn btn-gold" id="watch-ad-btn" onclick="watchAd()" style="margin-bottom:16px">
+        ▶ Watch Ad — Earn $0.01
+      </button>
+
+      <div class="card">
+        <div style="font-size:0.8rem; color:var(--text-muted); line-height:1.6">
+          <div style="font-weight:600; color:var(--text-primary); margin-bottom:8px">📋 Rules</div>
+          • Minimum 30 seconds between ads<br>
+          • Maximum 50 ads per day (resets at midnight UTC)<br>
+          • Ad must be watched to completion to earn<br>
+          • Attempting to cheat will result in a ban
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tasks ──────────────────────────────────────────── -->
+    <div class="page" id="page-tasks">
+      <div class="section-title">Available Tasks</div>
+      <div id="tasks-list">
+        <div class="empty-state"><div class="icon">⏳</div>Loading tasks...</div>
+      </div>
+    </div>
+
+    <!-- ── Referral ───────────────────────────────────────── -->
+    <div class="page" id="page-referral">
+      <div class="ref-hero">
+        <div class="ref-hero-icon">🤝</div>
+        <div class="ref-hero-title">Refer & Earn</div>
+        <div class="ref-hero-desc">Earn $0.05 for every friend who joins via your link. No limit!</div>
+      </div>
+
+      <div class="ref-stats">
+        <div class="ref-stat-card">
+          <div class="ref-stat-num" id="ref-count">0</div>
+          <div class="ref-stat-label">Friends Invited</div>
+        </div>
+        <div class="ref-stat-card">
+          <div class="ref-stat-num" id="ref-earned">$0.00</div>
+          <div class="ref-stat-label">Referral Earnings</div>
+        </div>
+      </div>
+
+      <div class="section-title">Your Referral Link</div>
+      <div class="ref-link-box">
+        <span class="ref-link-text" id="ref-link-text">Loading...</span>
+        <button class="copy-btn" onclick="copyRefLink()">Copy</button>
+      </div>
+      <button class="btn btn-gold" onclick="shareRefLink()" style="margin-bottom:20px">
+        📤 Share Link
+      </button>
+
+      <div class="card">
+        <div style="font-size:0.8rem; color:var(--text-muted); line-height:1.6">
+          <div style="font-weight:600; color:var(--text-primary); margin-bottom:8px">💡 How Referrals Work</div>
+          1. Share your unique link with friends<br>
+          2. They open the bot using your link<br>
+          3. You get $0.05 credited instantly<br>
+          4. No limit on how many friends you invite!
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Withdraw ───────────────────────────────────────── -->
+    <div class="page" id="page-withdraw">
+      <div class="withdraw-card">
+        <div style="font-family:var(--font-display); font-size:1.2rem; font-weight:700; color:var(--gold-bright); margin-bottom:4px">Withdraw Earnings</div>
+        <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:24px">Min. $1.00 • Processed in 24–48h</div>
+
+        <div class="field-group">
+          <label class="field-label">Payment Method</label>
+          <select class="field-select" id="wd-method">
+            <option value="usdt_trc20">USDT (TRC-20)</option>
+            <option value="usdt_erc20">USDT (ERC-20)</option>
+            <option value="binance_pay">Binance Pay ID</option>
+            <option value="ton">TON Wallet</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Wallet Address / ID</label>
+          <input class="field-input" id="wd-address" type="text" placeholder="Enter your wallet address" />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Amount (USD)</label>
+          <input class="field-input" id="wd-amount" type="number" min="1" step="0.01" placeholder="1.00" />
+        </div>
+
+        <div class="min-note">Available balance: $<span id="wd-available">0.0000</span></div>
+
+        <button class="btn btn-gold" id="wd-submit-btn" onclick="submitWithdrawal()">
+          💸 Request Withdrawal
+        </button>
+      </div>
+
+      <div class="section-title">Withdrawal History</div>
+      <div id="wd-history-list">
+        <div class="empty-state"><div class="icon">📭</div>No withdrawals yet</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom Nav -->
+  <nav>
+    <button class="nav-item active" id="nav-home" onclick="switchPage('home')">
+      <span class="nav-icon">🏠</span>Home
+    </button>
+    <button class="nav-item" id="nav-ads" onclick="switchPage('ads')">
+      <span class="nav-icon">📺</span>Ads
+    </button>
+    <button class="nav-item" id="nav-tasks" onclick="switchPage('tasks')">
+      <span class="nav-icon">✅</span>Tasks
+    </button>
+    <button class="nav-item" id="nav-referral" onclick="switchPage('referral')">
+      <span class="nav-icon">👥</span>Refer
+    </button>
+    <button class="nav-item" id="nav-withdraw" onclick="switchPage('withdraw')">
+      <span class="nav-icon">💸</span>Withdraw
+    </button>
+  </nav>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   EarnBot Mini App — Main JS
+   ══════════════════════════════════════════════════════════════ */
+
+// ── Config ──────────────────────────────────────────────────────
+const API_BASE   = "https://YOUR_BACKEND_URL";   // ← Replace with your backend URL
+const ADSGRAM_BLOCK_ID = "YOUR_ADSGRAM_BLOCK_ID"; // ← Replace with your Adsgram Block ID
+const AD_REWARD  = 0.01;
+const MAX_ADS    = 50;
+
+// ── State ────────────────────────────────────────────────────────
+let userData     = null;
+let adsToday     = 0;
+let refLink      = "";
+let AdController = null;
+let tasksDone    = 0;
+
+// ── Telegram WebApp init ─────────────────────────────────────────
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+tg.setHeaderColor("#0A0A0B");
+tg.setBackgroundColor("#0A0A0B");
+
+const initData = tg.initData || "";
+
+// Extract referrer from startParam
+const startParam = tg.initDataUnsafe?.start_param || "";
+const referrerId = startParam ? parseInt(startParam) : null;
+
+// ── API Helper ───────────────────────────────────────────────────
+async function api(method, endpoint, body = null) {
+  const opts = {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Telegram-Init-Data": initData
+    }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API_BASE + endpoint, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+// ── App Init ─────────────────────────────────────────────────────
+async function initApp() {
+  try {
+    userData = await api("POST", "/api/user/init", { referrer_id: referrerId });
+    adsToday  = userData.ads_today || 0;
+    refLink   = userData.referral_link || "";
+    tasksDone = 0;
+
+    updateUI();
+    await loadTasks();
+    await loadWithdrawHistory();
+    initAdsgram();
+
+    // Hide loader
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("app").style.display = "flex";
+  } catch (err) {
+    console.error("Init error:", err);
+    // Show error in loading screen
+    document.querySelector(".loader-logo").textContent = "⚠️ Error";
+    document.querySelector(".loader-ring").style.display = "none";
+  }
+}
+
+// ── Update UI with user data ──────────────────────────────────────
+function updateUI() {
+  if (!userData) return;
+  const bal = userData.balance.toFixed(4);
+  const earned = userData.total_earned.toFixed(2);
+
+  document.getElementById("balance-display").textContent = bal;
+  document.getElementById("header-balance").textContent  = "$" + bal;
+  document.getElementById("total-earned").textContent    = earned;
+  document.getElementById("stat-ads").textContent        = adsToday;
+  document.getElementById("stat-refs").textContent       = userData.referral_count || 0;
+  document.getElementById("stat-tasks").textContent      = tasksDone;
+  document.getElementById("wd-available").textContent    = bal;
+
+  // Referral page
+  document.getElementById("ref-link-text").textContent  = refLink;
+  document.getElementById("ref-count").textContent      = userData.referral_count || 0;
+  const refEarned = ((userData.referral_count || 0) * 0.05).toFixed(2);
+  document.getElementById("ref-earned").textContent     = "$" + refEarned;
+
+  // Ads progress
+  const pct = Math.min((adsToday / MAX_ADS) * 100, 100);
+  document.getElementById("ad-progress-bar").style.width  = pct + "%";
+  document.getElementById("ad-progress-text").textContent = `${adsToday} / ${MAX_ADS} ads`;
+  document.getElementById("ad-progress-pct").textContent  =
+    `$${(adsToday * AD_REWARD).toFixed(2)} / $${(MAX_ADS * AD_REWARD).toFixed(2)} today`;
+
+  // Disable watch btn if limit reached
+  const watchBtn = document.getElementById("watch-ad-btn");
+  if (adsToday >= MAX_ADS) {
+    watchBtn.disabled = true;
+    watchBtn.textContent = "✅ Daily Limit Reached";
+  } else {
+    watchBtn.disabled = false;
+    watchBtn.innerHTML = "▶ Watch Ad — Earn $0.01";
+  }
+}
+
+// ── Adsgram Integration ───────────────────────────────────────────
+function initAdsgram() {
+  try {
+    AdController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
+  } catch (e) {
+    console.warn("Adsgram not loaded:", e);
+  }
+}
+
+async function watchAd() {
+  if (adsToday >= MAX_ADS) {
+    showToast("Daily limit reached! Come back tomorrow.", "error");
+    return;
+  }
+
+  const btn = document.getElementById("watch-ad-btn");
+  btn.disabled = true;
+  btn.innerHTML = "⏳ Loading Ad...";
+
+  // In production: use AdController.show()
+  // If Adsgram is available, show the real ad
+  if (AdController) {
+    try {
+      await AdController.show();
+      // Ad completed — call backend to credit
+      await creditAdReward();
+    } catch (err) {
+      // User skipped or error
+      showToast("Ad skipped or unavailable. Try again!", "error");
+      btn.disabled = false;
+      btn.innerHTML = "▶ Watch Ad — Earn $0.01";
+    }
+  } else {
+    // Dev fallback: simulate 3-second ad
+    btn.innerHTML = "📺 Ad playing... (3s)";
+    await new Promise(r => setTimeout(r, 3000));
+    await creditAdReward();
+  }
+}
+
+async function creditAdReward() {
+  try {
+    const result = await api("POST", "/api/ads/complete");
+    adsToday++;
+    userData.balance = result.new_balance;
+    updateUI();
+    spawnCoins();
+    showToast(`+$${AD_REWARD.toFixed(2)} earned! 🎉`, "success");
+  } catch (err) {
+    showToast(err.message || "Could not credit reward", "error");
+  }
+}
+
+// ── Load Tasks ────────────────────────────────────────────────────
+async function loadTasks() {
+  try {
+    const data = await api("GET", "/api/tasks");
+    renderTasks(data.tasks || []);
+    tasksDone = (data.tasks || []).filter(t => t.completed).length;
+    document.getElementById("stat-tasks").textContent = tasksDone;
+  } catch (e) {
+    document.getElementById("tasks-list").innerHTML =
+      '<div class="empty-state"><div class="icon">⚠️</div>Failed to load tasks</div>';
+  }
+}
+
+const TASK_ICONS = { follow: "🐦", visit: "🌐", subscribe: "▶️", join: "📢" };
+
+function renderTasks(tasks) {
+  const el = document.getElementById("tasks-list");
+  if (!tasks.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">🎯</div>No tasks available</div>';
+    return;
+  }
+  el.innerHTML = tasks.map(t => `
+    <div class="task-item ${t.completed ? 'completed' : ''}" id="task-${t.id}">
+      <div class="task-icon-wrap">${TASK_ICONS[t.type] || "🎯"}</div>
+      <div class="task-info">
+        <div class="task-title">${t.title}</div>
+        <div class="task-desc">${t.description}</div>
+      </div>
+      ${t.completed
+        ? '<div class="task-check">✅</div>'
+        : `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+             <div class="task-reward">+$${t.reward.toFixed(2)}</div>
+             <button class="btn btn-gold btn-sm" onclick="doTask(${t.id},'${t.url}')">Go</button>
+           </div>`
+      }
+    </div>
+  `).join("");
+}
+
+let pendingTaskId = null;
+let pendingTaskTimeout = null;
+
+function doTask(taskId, url) {
+  // Open URL, then after 5s allow claiming
+  if (url) window.open(url, "_blank");
+  pendingTaskId = taskId;
+
+  // Wait 5 seconds then claim
+  clearTimeout(pendingTaskTimeout);
+  pendingTaskTimeout = setTimeout(() => claimTask(taskId), 5000);
+  showToast("Complete the task, then wait...", "");
+}
+
+async function claimTask(taskId) {
+  try {
+    const result = await api("POST", "/api/tasks/complete", { task_id: taskId });
+    userData.balance = result.new_balance;
+    tasksDone++;
+    updateUI();
+    showToast(`Task done! +$${result.reward.toFixed(2)} earned 🎉`, "success");
+    spawnCoins();
+    await loadTasks();
+  } catch (err) {
+    showToast(err.message || "Task claim failed", "error");
+  }
+}
+
+// ── Referral ──────────────────────────────────────────────────────
+function copyRefLink() {
+  if (!refLink) return;
+  navigator.clipboard.writeText(refLink).then(() => {
+    showToast("Link copied! 📋", "success");
+  }).catch(() => {
+    // Fallback for older devices
+    const el = document.createElement("textarea");
+    el.value = refLink;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+    showToast("Link copied! 📋", "success");
+  });
+}
+
+function shareRefLink() {
+  if (!refLink) return;
+  const text = `💰 Join EarnBot and earn money watching ads!\n\n${refLink}`;
+  if (tg.openTelegramLink) {
+    tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent("💰 Join EarnBot and earn real money!")}`);
+  } else {
+    copyRefLink();
+  }
+}
+
+// ── Withdraw ──────────────────────────────────────────────────────
+async function submitWithdrawal() {
+  const amount  = parseFloat(document.getElementById("wd-amount").value) || 0;
+  const method  = document.getElementById("wd-method").value;
+  const address = document.getElementById("wd-address").value.trim();
+
+  if (amount < 1) { showToast("Minimum withdrawal is $1.00", "error"); return; }
+  if (!address)   { showToast("Please enter your wallet address", "error"); return; }
+  if (userData.balance < amount) { showToast("Insufficient balance", "error"); return; }
+
+  const btn = document.getElementById("wd-submit-btn");
+  btn.disabled = true; btn.textContent = "⏳ Submitting...";
+
+  try {
+    const result = await api("POST", "/api/withdraw", { amount, method, address });
+    userData.balance = result.new_balance;
+    updateUI();
+    showToast("Withdrawal requested! Admin will process in 24–48h ✅", "success");
+    document.getElementById("wd-amount").value  = "";
+    document.getElementById("wd-address").value = "";
+    await loadWithdrawHistory();
+  } catch (err) {
+    showToast(err.message || "Withdrawal failed", "error");
+  } finally {
+    btn.disabled = false; btn.textContent = "💸 Request Withdrawal";
+  }
+}
+
+async function loadWithdrawHistory() {
+  try {
+    const data = await api("GET", "/api/withdraw/history");
+    renderWithdrawHistory(data.withdrawals || []);
+  } catch (e) {}
+}
+
+function renderWithdrawHistory(wds) {
+  const el = document.getElementById("wd-history-list");
+  if (!wds.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">📭</div>No withdrawals yet</div>';
+    return;
+  }
+  el.innerHTML = wds.map(w => `
+    <div class="wd-item">
+      <div class="wd-icon">💸</div>
+      <div class="wd-info">
+        <div class="wd-amount">$${w.amount.toFixed(2)}</div>
+        <div class="wd-method">${w.method} • ${new Date(w.created_at).toLocaleDateString()}</div>
+      </div>
+      <span class="wd-badge badge-${w.status}">${w.status}</span>
+    </div>
+  `).join("");
+}
+
+// ── Navigation ────────────────────────────────────────────────────
+function switchPage(name) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+  document.getElementById("page-" + name).classList.add("active");
+  document.getElementById("nav-" + name).classList.add("active");
+
+  // Reload data on switch
+  if (name === "withdraw") loadWithdrawHistory();
+  if (name === "tasks")   loadTasks();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg, type = "") {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = "show " + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ""; }, 3000);
+}
+
+// ── Coin burst effect ─────────────────────────────────────────────
+function spawnCoins() {
+  const cx = window.innerWidth / 2;
+  const cy = window.innerHeight / 2;
+  for (let i = 0; i < 8; i++) {
+    const coin = document.createElement("div");
+    coin.className = "coin-burst";
+    coin.textContent = "💰";
+    const angle = (i / 8) * 2 * Math.PI;
+    const dist  = 80 + Math.random() * 60;
+    coin.style.setProperty("--dx", Math.cos(angle) * dist + "px");
+    coin.style.setProperty("--dy", Math.sin(angle) * dist + "px");
+    coin.style.left = cx + "px";
+    coin.style.top  = cy + "px";
+    document.body.appendChild(coin);
+    setTimeout(() => coin.remove(), 900);
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────
+window.addEventListener("DOMContentLoaded", initApp);
+</script>
+</body>
+</html>
