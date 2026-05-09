@@ -4,20 +4,52 @@ import { useState, useEffect, useCallback } from "react";
 const ADMIN_IDS = ["7952834563", "8768003798"];
 
 // ─── MONETAG 50/50 RANDOM AD ─────────────────────────────────────
-// Your zone: 10986697 | Client zone: 10986665
-const showRandomMonetag = () => {
-  return new Promise((resolve, reject) => {
-    const useYourZone = Math.random() < 0.5;
-    const primaryFn = useYourZone ? window.show_10986697 : window.show_10986665;
-    const fallbackFn = useYourZone ? window.show_10986665 : window.show_10986697;
+// Your zone:    10986697 → show_10986697()
+// Client zone:  10986665 → show_10986665()
+// On each click, randomly pick one (50/50)
+// The .then() callback is where Monetag triggers the reward
 
-    if (typeof primaryFn === "function") {
-      primaryFn().then(resolve).catch(reject);
-    } else if (typeof fallbackFn === "function") {
-      fallbackFn().then(resolve).catch(reject);
-    } else {
-      reject(new Error("Monetag SDK not loaded yet"));
-    }
+const showRandomMonetag = (onReward) => {
+  return new Promise((resolve, reject) => {
+    let attempts = 0;
+
+    const tryShow = () => {
+      const useYourZone = Math.random() < 0.5;
+      const primaryFn = useYourZone
+        ? window.show_10986697
+        : window.show_10986665;
+      const fallbackFn = useYourZone
+        ? window.show_10986665
+        : window.show_10986697;
+
+      if (typeof primaryFn === "function") {
+        primaryFn()
+          .then(() => {
+            // This is where Monetag confirms ad was watched
+            // Replace alert with our reward function
+            onReward();
+            resolve();
+          })
+          .catch((err) => reject(err));
+
+      } else if (typeof fallbackFn === "function") {
+        fallbackFn()
+          .then(() => {
+            onReward();
+            resolve();
+          })
+          .catch((err) => reject(err));
+
+      } else if (attempts < 10) {
+        // SDK still loading — retry every 500ms
+        attempts++;
+        setTimeout(tryShow, 500);
+      } else {
+        reject(new Error("Monetag SDK not loaded. Please refresh."));
+      }
+    };
+
+    tryShow();
   });
 };
 
@@ -218,13 +250,16 @@ const AdsTab = ({ user, onBalanceUpdate }) => {
     setErrorMsg("");
     try {
       // Show random Monetag ad (50/50 between your zone and client zone)
-      await showRandomMonetag();
-      // Ad completed — credit reward via backend
-      const result = await apiWatchAd();
-      setAdsToday(result.adsToday);
-      setTotalWatched(result.totalWatched);
-      setTotalEarned(prev => +(prev + result.earned).toFixed(3));
-      onBalanceUpdate(result.newBalance);
+      // onReward callback fires when Monetag confirms ad was fully watched
+      await showRandomMonetag(async () => {
+        // This replaces alert('You have seen an ad!')
+        // Credit reward via backend
+        const result = await apiWatchAd();
+        setAdsToday(result.adsToday);
+        setTotalWatched(result.totalWatched);
+        setTotalEarned(prev => +(prev + result.earned).toFixed(3));
+        onBalanceUpdate(result.newBalance);
+      });
       setAdState("complete");
       setTimeout(() => setAdState("ready"), 2500);
     } catch (err) {
