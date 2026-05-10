@@ -236,24 +236,33 @@ const BalanceCard = ({ user }) => (
 );
 
 // ─── ADS TAB ────────────────────────────────────────────────────
-const AdsTab = ({ user, onBalanceUpdate }) => {
+const AdsTab = ({ user, onBalanceUpdate, maxAds }) => {
   const [adState, setAdState] = useState("ready");
   const [adsToday, setAdsToday] = useState(user.adsToday || 0);
   const [totalWatched, setTotalWatched] = useState(user.totalWatched || 0);
   const [totalEarned, setTotalEarned] = useState(user.totalEarned || 0);
   const [errorMsg, setErrorMsg] = useState("");
-  const MAX = 20;
+  const [cooldown, setCooldown] = useState(0);
+  const MAX = maxAds || 20;
+
+  // 15 second cooldown timer
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown(prev => {
+        if (prev <= 1) { clearInterval(timer); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   const watchAd = async () => {
-    if (adsToday >= MAX || adState !== "ready") return;
+    if (adsToday >= MAX || adState !== "ready" || cooldown > 0) return;
     setAdState("loading");
     setErrorMsg("");
     try {
-      // Show random Monetag ad (50/50 between your zone and client zone)
-      // onReward callback fires when Monetag confirms ad was fully watched
       await showRandomMonetag(async () => {
-        // This replaces alert('You have seen an ad!')
-        // Credit reward via backend
         const result = await apiWatchAd();
         setAdsToday(result.adsToday);
         setTotalWatched(result.totalWatched);
@@ -261,6 +270,8 @@ const AdsTab = ({ user, onBalanceUpdate }) => {
         onBalanceUpdate(result.newBalance);
       });
       setAdState("complete");
+      // Start 15 second cooldown after ad completes
+      setCooldown(15);
       setTimeout(() => setAdState("ready"), 2500);
     } catch (err) {
       setAdState("error");
@@ -278,35 +289,39 @@ const AdsTab = ({ user, onBalanceUpdate }) => {
         </div>
 
         <div onClick={watchAd} style={{
-          border: `1.5px solid ${adState === "complete" ? C.green : adState === "error" ? C.red : C.border}`,
+          border: `1.5px solid ${adState === "complete" ? C.green : adState === "error" ? C.red : cooldown > 0 ? C.borderDark : C.border}`,
           borderRadius: 16, padding: 18,
-          background: adState === "complete" ? C.greenBg : adState === "error" ? C.redBg : C.surface,
-          cursor: adsToday >= MAX ? "not-allowed" : "pointer",
+          background: adState === "complete" ? C.greenBg : adState === "error" ? C.redBg : cooldown > 0 ? C.surface : C.surface,
+          cursor: adsToday >= MAX || adState !== "ready" || cooldown > 0 ? "not-allowed" : "pointer",
           transition: "all 0.3s", marginBottom: 14, userSelect: "none",
+          opacity: cooldown > 0 && adState === "ready" ? 0.8 : 1,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <div style={{
               width: 56, height: 56, borderRadius: 16,
-              background: adState === "complete" ? C.green : adState === "error" ? C.red : C.black,
+              background: adState === "complete" ? C.green : adState === "error" ? C.red : cooldown > 0 ? C.borderDark : C.black,
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.3s",
-              animation: adState === "ready" && adsToday < MAX ? "pulse-ring 2s infinite" : "none",
+              animation: adState === "ready" && adsToday < MAX && cooldown === 0 ? "pulse-ring 2s infinite" : "none",
             }}>
               {adState === "loading" ? <div className="spinner" />
                 : adState === "complete" ? <Icon name="check" size={24} color="#fff" />
                 : adState === "error" ? <Icon name="x" size={24} color="#fff" />
+                : cooldown > 0 ? <span style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>{cooldown}s</span>
                 : <Icon name="play" size={24} color="#fff" />}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>
-                {adState === "loading" ? "Opening Ad... Reward auto-claims in 5s"
-                  : adState === "complete" ? "Reward Claimed! 🎉"
+                {adState === "loading" ? "Loading Ad..."
+                  : adState === "complete" ? "Reward Credited! 🎉"
                   : adState === "error" ? "Try Again"
+                  : cooldown > 0 ? `Wait ${cooldown} seconds...`
                   : "Watch Ad"}
               </div>
               <div style={{ fontSize: 12, color: C.textMuted }}>
                 {adState === "complete" ? "+$0.016 added to your balance"
                   : adState === "error" ? errorMsg
                   : adState === "loading" ? "Please watch the full ad to earn"
+                  : cooldown > 0 ? "Cooldown before next ad"
                   : "Tap to watch a short ad and earn instantly"}
               </div>
               <div style={{ marginTop: 10 }}>
@@ -645,7 +660,7 @@ const WithdrawTab = ({ user, onBalanceUpdate }) => {
 };
 
 // ─── USER APP ────────────────────────────────────────────────────
-const UserApp = ({ user: initialUser, isAdmin, onGoAdmin }) => {
+const UserApp = ({ user: initialUser, isAdmin, onGoAdmin, maxAds }) => {
   const [tab, setTab] = useState("ads");
   const [user, setUser] = useState(initialUser);
 
@@ -665,7 +680,7 @@ const UserApp = ({ user: initialUser, isAdmin, onGoAdmin }) => {
       <TopBar />
       <div style={{ flex: 1, padding: "16px 16px 90px", overflowY: "auto" }}>
         <BalanceCard user={user} />
-        {tab === "ads" && <AdsTab user={user} onBalanceUpdate={onBalanceUpdate} />}
+        {tab === "ads" && <AdsTab user={user} onBalanceUpdate={onBalanceUpdate} maxAds={maxAds} />}
         {tab === "tasks" && <TasksTab user={user} onBalanceUpdate={onBalanceUpdate} />}
         {tab === "invite" && <InviteTab user={user} />}
         {tab === "withdraw" && <WithdrawTab user={user} onBalanceUpdate={onBalanceUpdate} />}
@@ -986,6 +1001,173 @@ const AdminSettings = () => {
   );
 };
 
+// ─── ADMIN TASK MANAGER ──────────────────────────────────────────
+const apiGetCustomTasks = () => api("/admin/custom-tasks");
+const apiAddCustomTask = (task) => api("/admin/custom-tasks", { method: "POST", body: JSON.stringify(task) });
+const apiDeleteCustomTask = (id) => api(`/admin/custom-tasks/${id}`, { method: "DELETE" });
+const apiToggleCustomTask = (id) => api(`/admin/custom-tasks/${id}/toggle`, { method: "POST" });
+
+const AdminTaskManager = () => {
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ title: "", description: "", reward: "", link: "", icon: "📢", duration_days: "" });
+  const [adding, setAdding] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    apiGetCustomTasks().then(r => { setTasks(r.tasks || []); setLoading(false); }).catch(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const addTask = async () => {
+    if (!form.title || !form.reward || !form.link) return;
+    setAdding(true);
+    try {
+      await apiAddCustomTask({
+        title: form.title,
+        description: form.description || `Earn $${form.reward}`,
+        reward: parseFloat(form.reward),
+        link: form.link,
+        icon: form.icon || "📢",
+        duration_days: parseInt(form.duration_days) || 0,
+      });
+      setForm({ title: "", description: "", reward: "", link: "", icon: "📢", duration_days: "" });
+      setShowForm(false);
+      load();
+    } catch (e) {}
+    setAdding(false);
+  };
+
+  const removeTask = async (id) => {
+    try { await apiDeleteCustomTask(id); load(); } catch {}
+  };
+
+  const toggleTask = async (id) => {
+    try { await apiToggleCustomTask(id); load(); } catch {}
+  };
+
+  const icons = ["📢", "🤖", "👥", "🎯", "💬", "📱", "🌐", "🎮", "🏆", "💰"];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Add Task Button */}
+      <button className="btn-black" onClick={() => setShowForm(!showForm)} style={{ width: "100%", padding: "13px", borderRadius: 12, fontSize: 14, fontFamily: "DM Sans", display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
+        <Icon name="plus" size={16} color="#fff" />
+        {showForm ? "Cancel" : "Add Sponsored Task"}
+      </button>
+
+      {/* Add Task Form */}
+      {showForm && (
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14 }}>New Sponsored Task</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+
+            {/* Icon Picker */}
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, letterSpacing: "0.1em", marginBottom: 8 }}>ICON</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {icons.map(ic => (
+                  <button key={ic} onClick={() => setForm(f => ({ ...f, icon: ic }))} style={{ width: 40, height: 40, borderRadius: 10, border: `2px solid ${form.icon === ic ? C.black : C.border}`, background: form.icon === ic ? C.surface : C.white, fontSize: 20, cursor: "pointer" }}>
+                    {ic}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, letterSpacing: "0.1em", marginBottom: 6 }}>TASK TITLE *</div>
+              <input placeholder="e.g. Join @channelname" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+            </div>
+
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, letterSpacing: "0.1em", marginBottom: 6 }}>DESCRIPTION</div>
+              <input placeholder="e.g. Join our official channel" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            </div>
+
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, letterSpacing: "0.1em", marginBottom: 6 }}>REWARD PER USER ($) *</div>
+              <input type="number" placeholder="e.g. 0.025" value={form.reward} onChange={e => setForm(f => ({ ...f, reward: e.target.value }))} />
+            </div>
+
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, letterSpacing: "0.1em", marginBottom: 6 }}>TASK LINK (Channel/Bot URL) *</div>
+              <input placeholder="https://t.me/channelname" value={form.link} onChange={e => setForm(f => ({ ...f, link: e.target.value }))} />
+            </div>
+
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, letterSpacing: "0.1em", marginBottom: 6 }}>DURATION (days, 0 = no limit)</div>
+              <input type="number" placeholder="e.g. 2" value={form.duration_days} onChange={e => setForm(f => ({ ...f, duration_days: e.target.value }))} />
+            </div>
+
+            <button className="btn-black" onClick={addTask} disabled={adding} style={{ padding: "13px", borderRadius: 12, fontSize: 14, fontFamily: "DM Sans" }}>
+              {adding ? "Adding..." : "✅ Create Task"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tasks List */}
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40 }}><div className="spinner" style={{ margin: "0 auto" }} /></div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {tasks.map(t => {
+            const isExpired = t.duration_days > 0 && t.expires_at && Date.now() > t.expires_at;
+            return (
+              <div key={t.id} className="card" style={{ padding: 16, border: `1px solid ${isExpired ? "#FECACA" : C.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <div style={{ fontSize: 24 }}>{t.icon}</div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{t.title}</div>
+                      <div style={{ fontSize: 12, color: C.textMuted }}>{t.description}</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div className="mono" style={{ fontSize: 14, fontWeight: 700, color: C.green }}>+${t.reward}</div>
+                    <Tag status={isExpired ? "rejected" : t.active ? "active" : "rejected"} />
+                  </div>
+                </div>
+
+                <div style={{ background: C.surface, borderRadius: 10, padding: "8px 12px", marginBottom: 10, fontSize: 12 }}>
+                  <div style={{ color: C.textMuted, marginBottom: 2 }}>🔗 Link</div>
+                  <div className="mono" style={{ fontSize: 11, color: C.blue, wordBreak: "break-all" }}>{t.link}</div>
+                </div>
+
+                {t.duration_days > 0 && (
+                  <div style={{ fontSize: 11, color: isExpired ? C.red : C.textMuted, marginBottom: 10 }}>
+                    {isExpired ? "⚠️ Expired" : `⏰ Expires: ${new Date(t.expires_at).toLocaleDateString()}`}
+                  </div>
+                )}
+
+                <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 10 }}>
+                  👥 {t.completions || 0} users completed · 💰 Total paid: ${((t.completions || 0) * t.reward).toFixed(3)}
+                </div>
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="row-action" onClick={() => toggleTask(t.id)} style={{ flex: 1, background: t.active ? C.redBg : C.greenBg, color: t.active ? C.red : C.green, border: `1px solid ${t.active ? "#FECACA" : "#BBF7D0"}` }}>
+                    {t.active ? "⏸ Pause" : "▶ Activate"}
+                  </button>
+                  <button className="row-action" onClick={() => removeTask(t.id)} style={{ flex: 1, background: C.redBg, color: C.red, border: "1px solid #FECACA" }}>
+                    🗑 Remove
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          {tasks.length === 0 && (
+            <div style={{ textAlign: "center", padding: 40, color: C.textMuted, fontSize: 13 }}>
+              No sponsored tasks yet. Add one above!
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── ADMIN PANEL ─────────────────────────────────────────────────
 const AdminPanel = ({ onGoUser }) => {
   const [tab, setTab] = useState("overview");
@@ -993,6 +1175,7 @@ const AdminPanel = ({ onGoUser }) => {
     { id: "overview", label: "Overview", icon: "home" },
     { id: "withdrawals", label: "Payouts", icon: "withdraw" },
     { id: "users", label: "Users", icon: "users" },
+    { id: "tasks", label: "Tasks", icon: "task" },
     { id: "adlinks", label: "Ad Links", icon: "link" },
     { id: "settings", label: "Settings", icon: "chart" },
   ];
@@ -1027,6 +1210,7 @@ const AdminPanel = ({ onGoUser }) => {
         {tab === "overview" && <AdminOverview />}
         {tab === "withdrawals" && <AdminWithdrawals />}
         {tab === "users" && <AdminUsers />}
+        {tab === "tasks" && <AdminTaskManager />}
         {tab === "adlinks" && <AdminAdLinks />}
         {tab === "settings" && <AdminSettings />}
       </div>
@@ -1040,6 +1224,7 @@ export default function App() {
   const [telegramUser, setTelegramUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userData, setUserData] = useState(null);
+  const [settings, setSettings] = useState({ maxAdsPerDay: 20 });
 
   useEffect(() => {
     let tgUser = null;
@@ -1052,7 +1237,6 @@ export default function App() {
       }
     } catch (_) {}
 
-    // Fallback ONLY for browser preview — NOT in Telegram
     if (!tgUser) {
       tgUser = { id: 0, first_name: "User", username: "user" };
     }
@@ -1062,13 +1246,9 @@ export default function App() {
     setTelegramUser(tgUser);
     setIsAdmin(admin);
 
-    // Get referral code from Telegram start param
     let ref = "";
-    try {
-      ref = window.Telegram?.WebApp?.initDataUnsafe?.start_param || "";
-    } catch {}
+    try { ref = window.Telegram?.WebApp?.initDataUnsafe?.start_param || ""; } catch {}
 
-    // Initialize user with backend
     apiInitUser(ref)
       .then(res => {
         setUserData({
@@ -1082,10 +1262,15 @@ export default function App() {
           totalReferrals: res.user.totalReferrals,
           completedTasks: res.user.completedTasks || [],
         });
+        // Store settings from backend
+        if (res.settings) {
+          setSettings({
+            maxAdsPerDay: res.settings.maxAdsPerDay || 20,
+          });
+        }
         setView(admin ? "admin" : "user");
       })
       .catch(() => {
-        // Backend error — still show app with basic data
         setUserData({
           name: tgUser.first_name || "User",
           id: userId,
@@ -1099,7 +1284,6 @@ export default function App() {
         });
         setView(admin ? "admin" : "user");
       });
-
   }, []);
 
   if (view === "loading") return (
@@ -1116,7 +1300,7 @@ export default function App() {
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, position: "relative" }}>
       <GlobalStyles />
       {view === "user"
-        ? <UserApp user={userData} isAdmin={isAdmin} onGoAdmin={() => setView("admin")} />
+        ? <UserApp user={userData} isAdmin={isAdmin} onGoAdmin={() => setView("admin")} maxAds={settings.maxAdsPerDay} />
         : <AdminPanel onGoUser={() => setView("user")} />}
     </div>
   );
