@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 // ─── ADMIN IDs ────────────────────────────────────────────────────
-const ADMIN_IDS = ["7952834563", "8768003798"];
+const ADMIN_IDS = ["8768003798"];
 
 // ─── MONETAG 50/50 RANDOM AD ─────────────────────────────────────
 // Your zone:    10986697 → show_10986697()
@@ -9,31 +9,20 @@ const ADMIN_IDS = ["7952834563", "8768003798"];
 // On each click, randomly pick one (50/50)
 // The .then() callback is where Monetag triggers the reward
 
+// ─── MONETAG 50/50 RANDOM AD ─────────────────────────────────────
+// Your zone:    10986697 (ACTIVE)
+// Client zone:  10986665 (DISABLED - remove this)
+
 const showRandomMonetag = (onReward) => {
   return new Promise((resolve, reject) => {
     let attempts = 0;
 
     const tryShow = () => {
-      const useYourZone = Math.random() < 0.5;
-      const primaryFn = useYourZone
-        ? window.show_10986697
-        : window.show_10986665;
-      const fallbackFn = useYourZone
-        ? window.show_10986665
-        : window.show_10986697;
+      // Only use YOUR zone now (client zone removed)
+      const primaryFn = window.show_10986697;
 
       if (typeof primaryFn === "function") {
         primaryFn()
-          .then(() => {
-            // This is where Monetag confirms ad was watched
-            // Replace alert with our reward function
-            onReward();
-            resolve();
-          })
-          .catch((err) => reject(err));
-
-      } else if (typeof fallbackFn === "function") {
-        fallbackFn()
           .then(() => {
             onReward();
             resolve();
@@ -41,7 +30,6 @@ const showRandomMonetag = (onReward) => {
           .catch((err) => reject(err));
 
       } else if (attempts < 10) {
-        // SDK still loading — retry every 500ms
         attempts++;
         setTimeout(tryShow, 500);
       } else {
